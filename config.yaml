@@ -1,0 +1,4 @@
+tencent_cloud:        
+  secret_id: "AKIDuhLs"                      # 腾讯云 SecretId
+  secret_key: "dGnCj8"                       # 腾讯云 SecretKey
+ 
