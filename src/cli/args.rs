@@ -11,7 +11,7 @@ pub struct Cli {
     #[arg(short, long)]
     pub config: String,
 
-    /// Domains to manage, comma separated
+    /// Domains to manage, each line a domain
     #[arg(short, long)]
     pub domains: String,
 }

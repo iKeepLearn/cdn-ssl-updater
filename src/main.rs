@@ -3,10 +3,14 @@
 use std::path::Path;
 use std::process;
 
-use anyhow::Result;
 use clap::Parser;
+use csu::Result;
 use csu::cli::args::{Cli, Commands};
+use csu::cli::command::check_ssl_remin_days;
 use csu::config::get_all_config;
+use csu::error::AppError;
+use reqwest::Client;
+use tabled::Table;
 use tracing::{error, info};
 
 #[tokio::main]
@@ -21,13 +25,26 @@ async fn main() -> Result<()> {
         process::exit(1);
     }
     // 加载配置
-    let mut config = match get_all_config(&cli.config) {
+    let config = match get_all_config(&cli.config) {
         Ok(config) => config,
         Err(e) => {
             error!("Failed to load config: {}", e);
-            anyhow::bail!(e);
+            return Err(AppError::ConfigError(e.to_string()));
         }
     };
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let valid_domains = match csu::parse_domains(&client, &cli.domains).await {
+        Some(domains) => domains,
+        None => {
+            error!("No valid domains found in file: {}", cli.domains);
+            process::exit(1);
+        }
+    };
+
+    println!("Valid domains: {:?}", valid_domains);
 
     match cli.command {
         Commands::Check => {
@@ -35,7 +52,10 @@ async fn main() -> Result<()> {
                 "Checking SSL certificate status for domains: {}",
                 cli.domains
             );
-            // todo
+            let info = check_ssl_remin_days(valid_domains).await?;
+            let table = Table::new(&info).to_string();
+            println!("=== 域名列表 ===");
+            println!("{}", table);
         }
         Commands::Update => {
             info!("Updating SSL certificates for domains: {}", cli.domains);

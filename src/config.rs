@@ -1,5 +1,4 @@
-
-use config::{Config, ConfigError, File};
+use config::{Config, File};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -13,7 +12,7 @@ pub struct TencentCloudConfig {
     pub secret_key: String,
 }
 
-pub fn get_all_config(config_path: &str) -> anyhow::Result<AllConfig, ConfigError> {
+pub fn get_all_config(config_path: &str) -> crate::Result<AllConfig> {
     let config_builder = Config::builder()
         // 加载配置文件
         .add_source(File::with_name(config_path))
@@ -51,7 +50,6 @@ mod tests {
         let config = get_all_config(file_path.to_str().unwrap()).unwrap();
 
         // 断言配置内容
-       
 
         assert_eq!(config.tencent_cloud.secret_id, "testid");
         assert_eq!(config.tencent_cloud.secret_key, "testkey");
