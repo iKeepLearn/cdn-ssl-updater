@@ -2000,8 +2000,6 @@ dependencies = [
 [[package]]
 name = "tencent-sdk"
 version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbedd8de816d01124b549f6d90315070be32a57d7122c90280c8c3b294f2598a"
 dependencies = [
  "async-trait",
  "chrono",

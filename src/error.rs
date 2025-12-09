@@ -1,4 +1,5 @@
 use native_tls::HandshakeError;
+use tencent_sdk::core::TencentCloudError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -55,5 +56,11 @@ impl From<&str> for AppError {
 impl From<reqwest::Error> for AppError {
     fn from(err: reqwest::Error) -> Self {
         AppError::HttpError(err.to_string())
+    }
+}
+
+impl From<TencentCloudError> for AppError {
+    fn from(err: TencentCloudError) -> Self {
+        AppError::CloudError(err.to_string())
     }
 }

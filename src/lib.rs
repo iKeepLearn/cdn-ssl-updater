@@ -2,6 +2,7 @@ pub mod cdn;
 pub mod cli;
 pub mod config;
 pub mod dns;
+pub mod domain;
 pub mod error;
 pub mod ssl;
 
