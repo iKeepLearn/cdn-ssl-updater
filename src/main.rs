@@ -6,10 +6,9 @@ use std::process;
 use clap::Parser;
 use csu::Result;
 use csu::cli::args::{Cli, Commands};
-use csu::cli::command::{apply_ssl_certificate, check_ssl_remin_days};
+use csu::cli::command::{check_ssl_remin_days, update_ssl_certificate};
 use csu::config::get_all_config;
 use csu::error::AppError;
-use csu::ssl::TencentSSL;
 use reqwest::Client;
 use tabled::Table;
 use tracing::{error, info};
@@ -60,11 +59,7 @@ async fn main() -> Result<()> {
         }
         Commands::Update => {
             info!("Updating SSL certificates for domains: {}", cli.domains);
-            let ssl_client = TencentSSL::new(
-                &config.tencent_cloud.secret_id,
-                &config.tencent_cloud.secret_key,
-            )?;
-            apply_ssl_certificate(valid_domains, &ssl_client).await?;
+            update_ssl_certificate(valid_domains, &config.tencent_cloud).await?;
         }
         Commands::ForceUpdate => {
             info!(

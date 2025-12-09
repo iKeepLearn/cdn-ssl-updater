@@ -1,13 +1,14 @@
 use crate::error::AppError;
 
-use super::SSL;
+use super::{ApplyStatus, SSL};
 use tencent_sdk::{
     client::TencentCloudAsync,
     core::TencentCloudResult,
     middleware::RetryAsync,
-    services::ssl::{ApplyCertificate, DescribeCertificate, DownloadCertificate},
+    services::ssl::{ApplyCertificate, CheckCertificate, DownloadCertificate},
     transport::async_impl::ReqwestAsync,
 };
+use tracing::debug;
 
 pub struct TencentSSL {
     pub client: TencentCloudAsync<RetryAsync<ReqwestAsync>>,
@@ -49,14 +50,58 @@ impl SSL for TencentSSL {
         }
     }
 
-    async fn check_status(&self, certificate_id: &str) -> crate::Result<(i32, bool)> {
-        let request = DescribeCertificate::new(certificate_id);
-        let response = self.client.request(&request).await?;
-        match response.response.status {
-            Some(status) => Ok((status, status == 1)),
-            None => Err(AppError::CloudError(
-                "tencent cloud check ssl certificate status failed".to_string(),
-            )),
+    async fn check_status(&self, certificate_id: &str) -> crate::Result<ApplyStatus> {
+        let request = CheckCertificate::new(certificate_id);
+        match self.client.request(&request).await {
+            Ok(response) => {
+                debug!("CheckCertificate response: {:?}", response);
+                if let Some(status) = response.response.status
+                    && status == 1
+                {
+                    return Ok(ApplyStatus {
+                        certificate_id: certificate_id.to_string(),
+                        dns_key: "".to_string(),
+                        dns_value: "".to_string(),
+                        status,
+                        can_download: true,
+                    });
+                }
+
+                if let Some(status) = response.response.status
+                    && status == 0
+                    && let Some(dv_auth) = response.response.dv_auth_detail
+                    && let Some(dv_auth_key) = dv_auth.dv_auth_key
+                    && let Some(dv_auth_value) = dv_auth.dv_auth_value
+                {
+                    return Ok(ApplyStatus {
+                        certificate_id: certificate_id.to_string(),
+                        dns_key: dv_auth_key,
+                        dns_value: dv_auth_value,
+                        status,
+                        can_download: false,
+                    });
+                }
+
+                if let Some(status) = response.response.status {
+                    Ok(ApplyStatus {
+                        certificate_id: certificate_id.to_string(),
+                        dns_key: "".to_string(),
+                        dns_value: "".to_string(),
+                        status,
+                        can_download: false,
+                    })
+                } else {
+                    Err(AppError::CloudError(
+                        "tencent cloud check ssl certificate status missing fields".to_string(),
+                    ))
+                }
+            }
+            Err(e) => {
+                return Err(AppError::CloudError(format!(
+                    "tencent cloud check ssl certificate status failed: {}",
+                    e
+                )));
+            }
         }
     }
 }
