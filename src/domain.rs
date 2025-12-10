@@ -1,33 +1,40 @@
+use crate::Result;
 use crate::cdn::{CDN, TencentCDN};
-use crate::config::TencentCloudConfig;
 use crate::dns::{DNS, TencentDNS};
-use crate::ssl::{ApplyStatus, SSL, TencentSSL};
+use crate::ssl::{ApplyStatus, CertificateInfo, SSL, TencentSSL, parse_cert_from_base64};
+use serde::Deserialize;
+use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Domain {
-    name: String,
-    original_name: String,
-    ssl_info: Option<ApplyStatus>,
-    dns_info: Option<DnsInfo>,
+    pub name: String,
+    pub original_name: String,
+    pub ssl_provider: CloudProvider,
+    pub cdn_provider: CloudProvider,
+    pub dns_provider: CloudProvider,
+    pub ssl_info: Option<ApplyStatus>,
+    pub dns_info: Option<DnsInfo>,
+    pub certificate_info: Option<CertificateInfo>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
+pub struct CloudProvider {
+    pub name: String,
+    pub secret_id: String,
+    pub secret_key: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct DnsInfo {
     pub dns_status: u8,
     pub dns_record_id: Option<u64>,
 }
 
 impl Domain {
-    pub fn new(name: &str) -> Self {
-        let original_name = name.split('.').skip(1).collect::<Vec<&str>>().join(".");
-        Domain {
-            name: name.to_string(),
-            original_name,
-            ssl_info: None,
-            dns_info: None,
-        }
+    pub fn can_direct_update_ssl(&self) -> bool {
+        self.ssl_provider == self.cdn_provider
     }
 
     pub fn name(&self) -> String {
@@ -39,9 +46,44 @@ impl Domain {
     }
 
     pub fn ssl_certificate_id(&self) -> Option<String> {
-        match &self.ssl_info {
-            Some(info) => Some(info.certificate_id.clone()),
-            None => None,
+        self.ssl_info
+            .as_ref()
+            .map(|info| info.certificate_id.clone())
+    }
+
+    pub fn ssl_client(&self) -> Result<Arc<dyn SSL>> {
+        let secret_id = &self.ssl_provider.secret_id;
+        let secret_key = &self.ssl_provider.secret_key;
+        match self.ssl_provider.name.as_str() {
+            "tencent" => {
+                let ssl_client = TencentSSL::new(secret_id, secret_key)?;
+                Ok(Arc::new(ssl_client))
+            }
+            _ => panic!("invalid ssl cloud provider"),
+        }
+    }
+
+    pub fn dns_client(&self) -> Result<Arc<dyn DNS>> {
+        let secret_id = &self.dns_provider.secret_id;
+        let secret_key = &self.dns_provider.secret_key;
+        match self.ssl_provider.name.as_str() {
+            "tencent" => {
+                let dns_client = TencentDNS::new(secret_id, secret_key)?;
+                Ok(Arc::new(dns_client))
+            }
+            _ => panic!("invalid dns cloud provider"),
+        }
+    }
+
+    pub fn cdn_client(&self) -> Result<Arc<dyn CDN>> {
+        let secret_id = &self.cdn_provider.secret_id;
+        let secret_key = &self.cdn_provider.secret_key;
+        match self.ssl_provider.name.as_str() {
+            "tencent" => {
+                let cdn_client = TencentCDN::new(secret_id, secret_key)?;
+                Ok(Arc::new(cdn_client))
+            }
+            _ => panic!("invalid cdn cloud provider"),
         }
     }
 
@@ -60,11 +102,8 @@ impl Domain {
         }
     }
 
-    pub async fn apply_ssl<Client: SSL + Sync>(
-        &mut self,
-        ssl_client: &Client,
-        dv_auth_method: &str,
-    ) -> crate::Result<()> {
+    pub async fn apply_ssl(&mut self, dv_auth_method: &str) -> Result<()> {
+        let ssl_client = self.ssl_client()?;
         let certificate_id = ssl_client.apply(&self.name, dv_auth_method).await?;
         info!(
             "Applied SSL certificate for domain {}: {}",
@@ -80,10 +119,8 @@ impl Domain {
         Ok(())
     }
 
-    pub async fn check_ssl_status<Client: SSL + Sync>(
-        &mut self,
-        ssl_client: &Client,
-    ) -> crate::Result<Option<ApplyStatus>> {
+    pub async fn check_ssl_status(&mut self) -> Result<Option<ApplyStatus>> {
+        let ssl_client = self.ssl_client()?;
         if let Some(certificate_id) = &self.ssl_certificate_id() {
             let result = ssl_client.check_status(certificate_id).await?;
             info!(
@@ -97,24 +134,8 @@ impl Domain {
         }
     }
 
-    pub async fn download_ssl_certificate<Client: SSL + Sync>(
-        &self,
-        ssl_client: &Client,
-    ) -> crate::Result<Option<String>> {
-        if let Some(certificate_id) = &self.ssl_certificate_id() {
-            let certificate_content = ssl_client.download(certificate_id).await?;
-            Ok(Some(certificate_content))
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub async fn add_dns_record<Client: DNS + Sync>(
-        &mut self,
-        dns_client: &Client,
-        record: &str,
-        sub_domain: &str,
-    ) -> crate::Result<u64> {
+    pub async fn add_dns_record(&mut self, record: &str, sub_domain: &str) -> Result<u64> {
+        let dns_client = self.dns_client()?;
         let original_name = format!(".{}", self.original_name);
         let sub_domain = sub_domain.replace(&original_name, "");
         let record_id = dns_client
@@ -127,36 +148,37 @@ impl Domain {
         Ok(record_id)
     }
 
-    pub async fn modify_dns_record<Client: DNS + Sync>(
-        &self,
-        dns_client: &Client,
-        record: &str,
-        record_id: u64,
-    ) -> crate::Result<u64> {
+    pub async fn modify_dns_record(&self, record: &str, record_id: u64) -> Result<u64> {
+        let dns_client = self.dns_client()?;
         let record_id = dns_client
-            .modify_record(record, record_id, &self.name)
+            .modify_record(record, record_id, &self.original_name)
             .await?;
         Ok(record_id)
     }
 
-    pub async fn delete_dns_record<Client: DNS + Sync>(
-        &self,
-        dns_client: &Client,
-        record_id: u64,
-    ) -> crate::Result<String> {
-        let request_id = dns_client.delete_record(record_id, &self.name).await?;
-        Ok(request_id)
+    pub async fn delete_dns_record(&self) -> Result<String> {
+        let dns_client = self.dns_client()?;
+        if let Some(info) = &self.dns_info
+            && let Some(record_id) = info.dns_record_id
+        {
+            let request_id = dns_client
+                .delete_record(record_id, &self.original_name)
+                .await?;
+            return Ok(request_id);
+        }
+        Ok("ok".to_string())
     }
 }
 
-pub async fn auto_update_ssl(mut domain: Domain, config: &TencentCloudConfig) -> crate::Result<()> {
-    let ssl_client = TencentSSL::new(&config.secret_id, &config.secret_key)?;
+pub async fn auto_update_ssl(mut domain: Domain) -> Result<()> {
     if domain.ssl_certificate_id().is_none() {
-        domain.apply_ssl(&ssl_client, "DNS").await?;
+        domain.apply_ssl("DNS").await?;
     }
 
-    debug!("Applied SSL certificate for domain: {:?}", domain,);
-    if let Some(certificate_id) = domain.clone().ssl_certificate_id() {
+    debug!("Applied SSL certificate for domain: {:?}", domain);
+    if let Some(mut certificate_id) = domain.ssl_certificate_id() {
+        let ssl_client = domain.ssl_client()?;
+        let cdn_client = domain.cdn_client()?;
         loop {
             let result = ssl_client.check_status(&certificate_id).await?;
             info!(
@@ -165,22 +187,32 @@ pub async fn auto_update_ssl(mut domain: Domain, config: &TencentCloudConfig) ->
             );
             debug!("ApplyStatus: {:?}", result);
             if result.can_download {
-                let cdn_client = TencentCDN::new(&config.secret_id, &config.secret_key)?;
-                let cert_id = &domain
-                    .ssl_certificate_id()
-                    .expect("certificate id should exists");
-                let result = cdn_client.update_ssl(&domain.name(), cert_id).await?;
+                if !domain.can_direct_update_ssl() {
+                    let content = ssl_client.download(&certificate_id).await?;
+                    let cert = parse_cert_from_base64(&content)?;
+                    let other_ssl_client = crate::ssl_client(
+                        &domain.cdn_provider.name,
+                        &domain.cdn_provider.secret_id,
+                        &domain.cdn_provider.secret_key,
+                    )?;
+                    certificate_id = other_ssl_client
+                        .upload(&cert.public_key, &cert.private_key)
+                        .await?;
+                }
+                let result = cdn_client
+                    .update_ssl(&domain.name(), &certificate_id)
+                    .await?;
+                let _ = domain.delete_dns_record().await?;
                 info!(
-                    "Update SSL certificate for domain {}: {}",
+                    "Update SSL certificate for domain {} success: {}",
                     domain.name(),
                     result
                 );
-                break;
+                return Ok(());
             }
-            if domain.dns_status() == 0 {
-                let dns_client = TencentDNS::new(&config.secret_id, &config.secret_key)?;
+            if domain.dns_status() == 0 || domain.dns_info.is_none() {
                 let add_dns_record = domain
-                    .add_dns_record(&dns_client, &result.dns_value, &result.dns_key)
+                    .add_dns_record(&result.dns_value, &result.dns_key)
                     .await?;
                 info!(
                     "Added DNS record for domain {}: record id {}",
@@ -188,7 +220,8 @@ pub async fn auto_update_ssl(mut domain: Domain, config: &TencentCloudConfig) ->
                     add_dns_record
                 );
             }
-            let _ = sleep(Duration::from_mins(6));
+            info!("sleep 6 minutes for wait dns record verify");
+            sleep(Duration::from_mins(6)).await;
         }
     }
     Ok(())

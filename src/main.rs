@@ -1,17 +1,19 @@
 // src/main.rs
 
-use std::path::Path;
-use std::process;
-
 use clap::Parser;
 use csu::Result;
 use csu::cli::args::{Cli, Commands};
 use csu::cli::command::{check_ssl_remin_days, update_ssl_certificate};
-use csu::config::get_all_config;
+use csu::domain::Domain;
 use csu::error::AppError;
+use csu::ssl::CertificateInfo;
 use reqwest::Client;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use std::process;
 use tabled::Table;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -24,19 +26,23 @@ async fn main() -> Result<()> {
         error!("Domains file does not exist: {}", cli.domains);
         process::exit(1);
     }
-    // 加载配置
-    let config = match get_all_config(&cli.config) {
-        Ok(config) => config,
+
+    let file = File::open(&cli.domains)?;
+    let reader = BufReader::new(file);
+
+    let domains: Vec<Domain> = match serde_json::from_reader(reader) {
+        Ok(value) => value,
         Err(e) => {
-            error!("Failed to load config: {}", e);
+            error!("Failed to load domains: {}", e);
             return Err(AppError::ConfigError(e.to_string()));
         }
     };
+
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()?;
 
-    let valid_domains = match csu::parse_domains(&client, &cli.domains).await {
+    let valid_domains = match csu::parse_domains(&client, domains.clone()).await {
         Some(domains) => domains,
         None => {
             error!("No valid domains found in file: {}", cli.domains);
@@ -44,7 +50,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    println!("Valid domains: {:?}", valid_domains);
+    debug!("Valid domains: {:?}", valid_domains);
 
     match cli.command {
         Commands::Check => {
@@ -53,20 +59,31 @@ async fn main() -> Result<()> {
                 cli.domains
             );
             let info = check_ssl_remin_days(valid_domains).await?;
+            let info: Vec<CertificateInfo> = info
+                .into_iter()
+                .map(|domain| domain.certificate_info.unwrap_or_default())
+                .collect();
             let table = Table::new(&info).to_string();
             println!("=== 域名列表 ===");
             println!("{}", table);
         }
         Commands::Update => {
             info!("Updating SSL certificates for domains: {}", cli.domains);
-            update_ssl_certificate(valid_domains, &config.tencent_cloud).await?;
+            let domains: Vec<Domain> = valid_domains
+                .into_iter()
+                .filter(|domain| match &domain.certificate_info {
+                    Some(info) => info.need_update(),
+                    None => true,
+                })
+                .collect();
+            update_ssl_certificate(domains).await?;
         }
         Commands::ForceUpdate => {
             info!(
                 "Force updating SSL certificates for domains: {}",
                 cli.domains
             );
-            // todo
+            update_ssl_certificate(domains).await?;
         }
         Commands::Version => {
             println!("CDN SSL Auto Updater version 1.0.0");

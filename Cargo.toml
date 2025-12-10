@@ -33,8 +33,10 @@ futures = "0.3.31"
 tokio-stream = "0.1.17"
 
 
-# tencent-sdk ={ path = "../tencent-sdk-rust"}
-tencent-sdk ={ git = "https://github.com/iKeepLearn/tencent-sdk-rust.git"}
+tencent-sdk ={ path = "../tencent-sdk-rust"}
+base64 = "0.22.1"
+zip = "6.0.0"
+# tencent-sdk ={ git = "https://github.com/iKeepLearn/tencent-sdk-rust.git"}
 
 [profile.release]
 lto = true

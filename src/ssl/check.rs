@@ -1,16 +1,17 @@
 use chrono::{DateTime, Utc};
 use native_tls::TlsConnector;
+use serde::Deserialize;
 use std::borrow::Cow::{self, Borrowed};
 use std::net::TcpStream;
 use tabled::Tabled;
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct CertificateInfo {
-    domain: String,
-    issuer: String,
-    valid_from: DateTime<Utc>,
-    valid_to: DateTime<Utc>,
-    days_remaining: i64,
+    pub domain: String,
+    pub issuer: String,
+    pub valid_from: DateTime<Utc>,
+    pub valid_to: DateTime<Utc>,
+    pub days_remaining: i64,
 }
 
 impl Tabled for CertificateInfo {

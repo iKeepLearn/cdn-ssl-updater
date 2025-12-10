@@ -30,7 +30,7 @@ impl CDN for TencentCDN {
             Ok(response) => Ok(response.response.request_id),
             Err(e) => Err(AppError::CloudError(format!(
                 "tencent cloud download ssl certificate failed:{}",
-                e.to_string()
+                e
             ))),
         }
     }

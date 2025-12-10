@@ -1,6 +1,5 @@
 pub mod cdn;
 pub mod cli;
-pub mod config;
 pub mod dns;
 pub mod domain;
 pub mod error;
@@ -8,37 +7,22 @@ pub mod ssl;
 
 pub type Result<T> = std::result::Result<T, error::AppError>;
 
+use crate::cdn::{CDN, TencentCDN};
+use crate::dns::{DNS, TencentDNS};
+use crate::ssl::{SSL, TencentSSL};
 use futures::StreamExt;
 use reqwest::{Client, StatusCode, Url};
-use std::fs::File;
-use std::io::Read;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tracing::{error, info};
+use tracing::info;
 
-pub async fn parse_domains(client: &Client, domains_file: &str) -> Option<Vec<String>> {
-    let mut file = match File::open(domains_file) {
-        Ok(f) => f,
-        Err(e) => {
-            error!("Failed to open domains file {}: {}", domains_file, e);
-            return None;
-        }
-    };
+use crate::domain::Domain;
 
-    let mut contents = String::new();
-    match file.read_to_string(&mut contents) {
-        Ok(_) => {}
-        Err(e) => {
-            error!("Failed to read domains file {}: {}", domains_file, e);
-            return None;
-        }
-    };
-
-    // 2. Prepare the data: Split lines and collect into a Vec<String>
-    let domains: Vec<String> = contents
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| line.trim().to_lowercase())
+pub async fn parse_domains(client: &Client, domains: Vec<Domain>) -> Option<Vec<Domain>> {
+    let domains: Vec<Domain> = domains
+        .into_iter()
+        .filter(|domain| !domain.name.trim().is_empty())
         .collect();
 
     if domains.is_empty() {
@@ -62,7 +46,7 @@ pub async fn parse_domains(client: &Client, domains_file: &str) -> Option<Vec<St
         .for_each_concurrent(domains_len, |domain| {
             let output_tx = c_output.clone();
             async move {
-                let is_valid = is_domain_valid(client, &domain).await;
+                let is_valid = is_domain_valid(client, &domain.name).await;
                 if is_valid {
                     let _ = output_tx.send(domain);
                 }
@@ -96,5 +80,35 @@ async fn is_domain_valid(client: &Client, domain: &str) -> bool {
             info!("Domain check failed for {}: {}", domain, e);
             false
         }
+    }
+}
+
+pub fn ssl_client(provider: &str, secret_id: &str, secret_key: &str) -> Result<Arc<dyn SSL>> {
+    match provider {
+        "tencent" => {
+            let ssl_client = TencentSSL::new(secret_id, secret_key)?;
+            Ok(Arc::new(ssl_client))
+        }
+        _ => panic!("invalid ssl cloud provider"),
+    }
+}
+
+pub fn dns_client(provider: &str, secret_id: &str, secret_key: &str) -> Result<Arc<dyn DNS>> {
+    match provider {
+        "tencent" => {
+            let dns_client = TencentDNS::new(secret_id, secret_key)?;
+            Ok(Arc::new(dns_client))
+        }
+        _ => panic!("invalid dns cloud provider"),
+    }
+}
+
+pub fn cdn_client(provider: &str, secret_id: &str, secret_key: &str) -> Result<Arc<dyn CDN>> {
+    match provider {
+        "tencent" => {
+            let cdn_client = TencentCDN::new(secret_id, secret_key)?;
+            Ok(Arc::new(cdn_client))
+        }
+        _ => panic!("invalid cdn cloud provider"),
     }
 }

@@ -1,0 +1,21 @@
+[
+  {
+    "name": "cdn.example.com",
+     "original_name":"example.com",
+    "ssl_provider": {
+      "name": "tencent",
+      "secret_id": "AKI....",
+      "secret_key": "dGn...."
+    },
+    "dns_provider": {
+      "name": "tencent",
+      "secret_id": "AKI....",
+      "secret_key": "dGn...."
+    },
+    "cdn_provider": {
+      "name": "tencent",
+      "secret_id": "AKI....",
+      "secret_key": "dGn...."
+    }
+  }
+]

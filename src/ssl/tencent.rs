@@ -1,11 +1,11 @@
-use crate::error::AppError;
-
 use super::{ApplyStatus, SSL};
+use crate::Result;
+use crate::error::AppError;
 use tencent_sdk::{
     client::TencentCloudAsync,
     core::TencentCloudResult,
     middleware::RetryAsync,
-    services::ssl::{ApplyCertificate, CheckCertificate, DownloadCertificate},
+    services::ssl::{ApplyCertificate, CheckCertificate, DownloadCertificate, UploadCertificate},
     transport::async_impl::ReqwestAsync,
 };
 use tracing::debug;
@@ -28,7 +28,7 @@ impl TencentSSL {
 
 #[async_trait::async_trait]
 impl SSL for TencentSSL {
-    async fn apply(&self, domain: &str, dv_auth_method: &str) -> crate::Result<String> {
+    async fn apply(&self, domain: &str, dv_auth_method: &str) -> Result<String> {
         let request = ApplyCertificate::new(dv_auth_method, domain);
         let response = self.client.request(&request).await?;
         match response.response.certificate_id {
@@ -39,7 +39,7 @@ impl SSL for TencentSSL {
         }
     }
 
-    async fn download(&self, certificate_id: &str) -> crate::Result<String> {
+    async fn download(&self, certificate_id: &str) -> Result<String> {
         let request = DownloadCertificate::new(certificate_id);
         let response = self.client.request(&request).await?;
         match response.response.content {
@@ -50,7 +50,7 @@ impl SSL for TencentSSL {
         }
     }
 
-    async fn check_status(&self, certificate_id: &str) -> crate::Result<ApplyStatus> {
+    async fn check_status(&self, certificate_id: &str) -> Result<ApplyStatus> {
         let request = CheckCertificate::new(certificate_id);
         match self.client.request(&request).await {
             Ok(response) => {
@@ -102,6 +102,19 @@ impl SSL for TencentSSL {
                     e
                 )));
             }
+        }
+    }
+
+    async fn upload(&self, certificate_public_key: &str, private_key: &str) -> Result<String> {
+        let request = UploadCertificate::new(certificate_public_key)
+            .with_private_key(private_key)
+            .with_certificate_type("SVR");
+        let response = self.client.request(&request).await?;
+        match response.response.certificate_id {
+            Some(certificate_id) => Ok(certificate_id),
+            None => Err(AppError::CloudError(
+                "tencent cloud upload ssl certificate failed".to_string(),
+            )),
         }
     }
 }

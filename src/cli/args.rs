@@ -7,9 +7,6 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
-    /// Specific file for configuration
-    #[arg(short, long)]
-    pub config: String,
 
     /// Domains to manage, each line a domain
     #[arg(short, long)]

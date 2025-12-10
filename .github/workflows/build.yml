@@ -52,7 +52,7 @@ jobs:
 
       - name: Create ZIP file
         run: |
-          zip -r ${{ env.APP_NAME }}-linux-x86_64.zip ${{ env.APP_NAME }} config.yaml
+          zip -r ${{ env.APP_NAME }}-linux-x86_64.zip ${{ env.APP_NAME }} config.yaml ${{ env.APP_NAME }} domains.json
 
       - name: Create Release
         id: create_release

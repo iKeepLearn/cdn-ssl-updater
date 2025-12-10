@@ -12,6 +12,27 @@ pub struct TencentCloudConfig {
     pub secret_key: String,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct Domain {
+    pub name: String,
+    pub ssl_provider: CloudProvider,
+    pub cdn_provider: CloudProvider,
+    pub dns_provider: CloudProvider,
+}
+
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
+pub struct CloudProvider {
+    pub name: String,
+    pub secret_id: String,
+    pub secret_key: String,
+}
+
+impl Domain {
+    pub fn can_direct_update_ssl(&self) -> bool {
+        self.ssl_provider == self.cdn_provider
+    }
+}
+
 pub fn get_all_config(config_path: &str) -> crate::Result<AllConfig> {
     let config_builder = Config::builder()
         // 加载配置文件

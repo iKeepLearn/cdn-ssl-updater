@@ -1,6 +1,7 @@
 use native_tls::HandshakeError;
 use tencent_sdk::core::TencentCloudError;
 use thiserror::Error;
+use zip::result::ZipError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -62,5 +63,17 @@ impl From<reqwest::Error> for AppError {
 impl From<TencentCloudError> for AppError {
     fn from(err: TencentCloudError) -> Self {
         AppError::CloudError(err.to_string())
+    }
+}
+
+impl From<ZipError> for AppError {
+    fn from(err: ZipError) -> Self {
+        AppError::Other(err.to_string())
+    }
+}
+
+impl From<base64::DecodeError> for AppError {
+    fn from(err: base64::DecodeError) -> Self {
+        AppError::Other(err.to_string())
     }
 }
