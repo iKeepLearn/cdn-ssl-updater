@@ -1,7 +1,7 @@
 use crate::Result;
-use crate::cdn::{CDN, TencentCDN};
-use crate::dns::{DNS, TencentDNS};
-use crate::ssl::{ApplyStatus, CertificateInfo, SSL, TencentSSL, parse_cert_from_base64};
+use crate::cdn::CDN;
+use crate::dns::DNS;
+use crate::ssl::{ApplyStatus, CertificateInfo, SSL, parse_cert_from_base64};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::time::{Duration, sleep};
@@ -54,37 +54,22 @@ impl Domain {
     pub fn ssl_client(&self) -> Result<Arc<dyn SSL>> {
         let secret_id = &self.ssl_provider.secret_id;
         let secret_key = &self.ssl_provider.secret_key;
-        match self.ssl_provider.name.as_str() {
-            "tencent" => {
-                let ssl_client = TencentSSL::new(secret_id, secret_key)?;
-                Ok(Arc::new(ssl_client))
-            }
-            _ => panic!("invalid ssl cloud provider"),
-        }
+        let provider = &self.ssl_provider.name;
+        Ok(crate::ssl_client(provider, secret_id, secret_key)?)
     }
 
     pub fn dns_client(&self) -> Result<Arc<dyn DNS>> {
         let secret_id = &self.dns_provider.secret_id;
         let secret_key = &self.dns_provider.secret_key;
-        match self.ssl_provider.name.as_str() {
-            "tencent" => {
-                let dns_client = TencentDNS::new(secret_id, secret_key)?;
-                Ok(Arc::new(dns_client))
-            }
-            _ => panic!("invalid dns cloud provider"),
-        }
+        let provider = &self.dns_provider.name;
+        Ok(crate::dns_client(provider, secret_id, secret_key)?)
     }
 
     pub fn cdn_client(&self) -> Result<Arc<dyn CDN>> {
         let secret_id = &self.cdn_provider.secret_id;
         let secret_key = &self.cdn_provider.secret_key;
-        match self.ssl_provider.name.as_str() {
-            "tencent" => {
-                let cdn_client = TencentCDN::new(secret_id, secret_key)?;
-                Ok(Arc::new(cdn_client))
-            }
-            _ => panic!("invalid cdn cloud provider"),
-        }
+        let provider = &self.cdn_provider.name;
+        Ok(crate::cdn_client(provider, secret_id, secret_key)?)
     }
 
     pub fn set_dns_info(&mut self, info: DnsInfo) {
