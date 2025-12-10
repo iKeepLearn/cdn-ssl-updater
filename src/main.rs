@@ -69,7 +69,8 @@ async fn main() -> Result<()> {
         }
         Commands::Update => {
             info!("Updating SSL certificates for domains: {}", cli.domains);
-            let domains: Vec<Domain> = valid_domains
+            let info = check_ssl_remin_days(valid_domains).await?;
+            let domains: Vec<Domain> = info
                 .into_iter()
                 .filter(|domain| match &domain.certificate_info {
                     Some(info) => info.need_update(),
