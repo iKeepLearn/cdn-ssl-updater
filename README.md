@@ -39,7 +39,7 @@
 
 ## 定时任务（Cron）推荐配置
 
-- **每日凌晨 2 点自动备份数据库**
+- **每日凌晨 2 点自动更新有效期小于3天的cdn证书**
 
   ```bash
   0 2 * * * /path/to/csu -d /path/to/domains.json update

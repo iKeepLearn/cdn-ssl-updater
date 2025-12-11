@@ -1906,6 +1906,7 @@ dependencies = [
 [[package]]
 name = "tencent-sdk"
 version = "0.1.3"
+source = "git+https://github.com/iKeepLearn/tencent-sdk-rust.git#53b10ef06b8adee3e08c67a5e4c9e3f888b685d5"
 dependencies = [
  "async-trait",
  "chrono",
