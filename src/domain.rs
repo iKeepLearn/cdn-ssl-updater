@@ -55,21 +55,21 @@ impl Domain {
         let secret_id = &self.ssl_provider.secret_id;
         let secret_key = &self.ssl_provider.secret_key;
         let provider = &self.ssl_provider.name;
-        Ok(crate::ssl_client(provider, secret_id, secret_key)?)
+        crate::ssl_client(provider, secret_id, secret_key)
     }
 
     pub fn dns_client(&self) -> Result<Arc<dyn DNS>> {
         let secret_id = &self.dns_provider.secret_id;
         let secret_key = &self.dns_provider.secret_key;
         let provider = &self.dns_provider.name;
-        Ok(crate::dns_client(provider, secret_id, secret_key)?)
+        crate::dns_client(provider, secret_id, secret_key)
     }
 
     pub fn cdn_client(&self) -> Result<Arc<dyn CDN>> {
         let secret_id = &self.cdn_provider.secret_id;
         let secret_key = &self.cdn_provider.secret_key;
         let provider = &self.cdn_provider.name;
-        Ok(crate::cdn_client(provider, secret_id, secret_key)?)
+        crate::cdn_client(provider, secret_id, secret_key)
     }
 
     pub fn set_dns_info(&mut self, info: DnsInfo) {
@@ -123,20 +123,42 @@ impl Domain {
         let dns_client = self.dns_client()?;
         let original_name = format!(".{}", self.original_name);
         let sub_domain = sub_domain.replace(&original_name, "");
-        let record_id = dns_client
-            .add_record(record, &self.original_name, &sub_domain)
-            .await?;
-        self.set_dns_info(DnsInfo {
-            dns_status: 1,
-            dns_record_id: Some(record_id),
-        });
-        Ok(record_id)
+        match dns_client.record_id(&self.original_name, &sub_domain).await {
+            Ok(record_id) => {
+                debug!("old dns record id:{}", record_id);
+                let _ = self
+                    .modify_dns_record(record, record_id, &sub_domain)
+                    .await?;
+                self.set_dns_info(DnsInfo {
+                    dns_status: 1,
+                    dns_record_id: Some(record_id),
+                });
+                Ok(record_id)
+            }
+            Err(e) => {
+                debug!("add new record:{}", e);
+                let record_id = dns_client
+                    .add_record(record, &self.original_name, &sub_domain)
+                    .await?;
+
+                self.set_dns_info(DnsInfo {
+                    dns_status: 1,
+                    dns_record_id: Some(record_id),
+                });
+                Ok(record_id)
+            }
+        }
     }
 
-    pub async fn modify_dns_record(&self, record: &str, record_id: u64) -> Result<u64> {
+    pub async fn modify_dns_record(
+        &self,
+        record: &str,
+        record_id: u64,
+        sub_domain: &str,
+    ) -> Result<u64> {
         let dns_client = self.dns_client()?;
         let record_id = dns_client
-            .modify_record(record, record_id, &self.original_name)
+            .modify_record(record, record_id, &self.original_name, sub_domain)
             .await?;
         Ok(record_id)
     }

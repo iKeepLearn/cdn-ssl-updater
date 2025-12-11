@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
             update_ssl_certificate(domains).await?;
         }
         Commands::Version => {
-            println!("CDN SSL Auto Updater version 1.0.0");
+            println!("CDN SSL Auto Updater version 2.1.0");
         }
     }
     Ok(())

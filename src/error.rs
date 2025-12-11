@@ -24,12 +24,6 @@ pub enum AppError {
     Other(String),
 }
 
-impl From<config::ConfigError> for AppError {
-    fn from(err: config::ConfigError) -> Self {
-        AppError::ConfigError(err.to_string())
-    }
-}
-
 impl From<native_tls::Error> for AppError {
     fn from(err: native_tls::Error) -> Self {
         AppError::HttpError(err.to_string())
